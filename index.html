@@ -1,0 +1,151 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Don Caja - Control Financiero</title>
+    <link href="https://fonts.googleapis.com/css2?family=Nunito:wght@700;800;900&family=Nunito+Sans:wght@400;600&display=swap" rel="stylesheet">
+
+    <script type="module">
+      import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
+      import { getFirestore, collection, addDoc, onSnapshot, query, orderBy, serverTimestamp, doc, getDoc }
+        from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
+
+      const firebaseConfig = {
+        apiKey:            "AIzaSyBlOyRg0e_bv6yXI4gtO-e0sgNoFPVkI14",
+        authDomain:        "don-caja-app.firebaseapp.com",
+        projectId:         "don-caja-app",
+        storageBucket:     "don-caja-app.firebasestorage.app",
+        messagingSenderId: "529138964879",
+        appId:             "1:529138964879:web:88e3baf0c50454c6bb93fa"
+      };
+
+      const app = initializeApp(firebaseConfig);
+      const db  = getFirestore(app);
+
+      window.clienteID = "";
+
+      // LÓGICA DE VALIDACIÓN DE CLIENTE (Firebase check)
+      window.verificarClave = async function() {
+        const pass = document.getElementById("pass").value.trim();
+        const btn = document.getElementById("btnEntrar");
+        
+        if (!pass) {
+          mostrarToast("Por favor, ingresa tu clave", "error");
+          return;
+        }
+
+        btn.disabled = true;
+        btn.textContent = "Verificando...";
+
+        try {
+          const docRef = doc(db, "clientes", pass);
+          const docSnap = await getDoc(docRef);
+
+          if (docSnap.exists()) {
+            window.clienteID = pass; 
+            document.getElementById("pantalla-login").style.display     = "none";
+            document.getElementById("pantalla-dashboard").style.display = "block";
+            iniciarDashboard();
+          } else {
+            mostrarToast("Clave no válida. Contacta al soporte.", "error");
+            document.getElementById("pass").value = "";
+          }
+        } catch (e) {
+          mostrarToast("Error de red. Intenta nuevamente.", "error");
+        } finally {
+          btn.disabled = false;
+          btn.textContent = "Entrar a mi caja";
+        }
+      };
+
+      document.addEventListener("DOMContentLoaded", () => {
+        // Vinculación segura de elementos
+        document.getElementById("btnEntrar").addEventListener("click", window.verificarClave);
+        document.getElementById("pass").addEventListener("keydown", e => {
+          if (e.key === "Enter") window.verificarClave();
+        });
+      });
+
+      // DASHBOARD: Lógica original preservada
+      function iniciarDashboard() {
+        document.getElementById("fechaHoy").textContent = new Date().toLocaleDateString("es-MX", {weekday:"short", day:"numeric", month:"short"});
+
+        const q = query(collection(db, "clientes", window.clienteID, "ventas"), orderBy("fecha", "desc"));
+        onSnapshot(q, (snapshot) => {
+          const lista = document.getElementById("listaVentas");
+          lista.innerHTML = "";
+          let total = 0;
+          let ventasHoy = 0;
+          window._ventasData = [];
+
+          snapshot.forEach((doc) => {
+            const d = doc.data();
+            window._ventasData.push(d);
+            const subtotal = d.precio * (d.cantidad || 1);
+            total += subtotal;
+            ventasHoy++;
+
+            const item = document.createElement("div");
+            item.className = "venta-item";
+            item.innerHTML = `<div class='venta-info'><span class='venta-nombre'>${d.producto}</span></div><span class='venta-precio'>$${subtotal.toLocaleString()}</span>`;
+            lista.appendChild(item);
+          });
+          document.getElementById("totalDia").textContent = "$" + total.toLocaleString();
+        });
+      }
+
+      window.registrarVenta = async function() {
+        const p = document.getElementById("producto").value.trim();
+        const pr = parseFloat(document.getElementById("precio").value);
+        if (!p || isNaN(pr)) return;
+        await addDoc(collection(db, "clientes", window.clienteID, "ventas"), { producto:p, precio:pr, cantidad:1, fecha:serverTimestamp() });
+        document.getElementById("producto").value = "";
+        document.getElementById("precio").value = "";
+      };
+
+      function mostrarToast(msg, tipo) {
+        const t = document.getElementById("toast");
+        t.textContent = msg;
+        t.className = "toast show" + (tipo ? " " + tipo : "");
+        setTimeout(() => { t.className = "toast"; }, 2800);
+      }
+    </script>
+
+    <style>
+        :root { --verde: #006847; --oro: #F5C518; --rojo: #CE1126; --crema: #FFF8EC; --cafe: #3D1C02; --gris: #f7f7f5; }
+        body { font-family: 'Nunito Sans', sans-serif; background: var(--crema); margin: 0; }
+        #pantalla-login { display: flex; justify-content: center; align-items: center; min-height: 100vh; padding: 20px; }
+        .card { background: #fff; padding: 32px; border-radius: 24px; box-shadow: 0 8px 40px rgba(0,0,0,0.1); max-width: 390px; width: 100%; text-align: center; }
+        .video-box { width: 100%; height: 200px; background: #eee; margin-bottom: 20px; border-radius: 12px; }
+        .btn-entrar { width: 100%; padding: 15px; background: var(--verde); color: #fff; border: none; border-radius: 12px; font-weight: 800; cursor: pointer; }
+        #pantalla-dashboard { display: none; background: var(--gris); min-height: 100vh; padding: 20px; }
+        .venta-item { background: #fff; padding: 15px; margin-bottom: 10px; border-radius: 12px; display: flex; justify-content: space-between; }
+        .toast { position: fixed; bottom: 20px; left: 50%; transform: translateX(-50%); background: var(--cafe); color: white; padding: 10px 20px; border-radius: 20px; opacity: 0; transition: opacity 0.3s; }
+        .toast.show { opacity: 1; }
+        .toast.error { background: var(--rojo); }
+    </style>
+</head>
+<body>
+
+    <div id="pantalla-login">
+        <div class="card">
+            <div class="video-box"></div>
+            
+            <h1>Don Caja 💼</h1>
+            <input type="password" id="pass" placeholder="Clave de cliente">
+            <button class="btn-entrar" id="btnEntrar">Entrar a mi caja</button>
+            <p>2026. Todos los derechos reservados.</p>
+        </div>
+    </div>
+
+    <div id="pantalla-dashboard">
+        <div class="header"><h2>Don Caja 💼</h2><span id="fechaHoy"></span></div>
+        <div id="totalDia">$0.00</div>
+        <div id="listaVentas"></div>
+        <button onclick="registrarVenta()">Anotar venta</button>
+    </div>
+
+    <div class="toast" id="toast"></div>
+</body>
+</html>
